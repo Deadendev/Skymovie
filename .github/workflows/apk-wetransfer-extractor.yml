@@ -1,4 +1,4 @@
-name: WeTransfer APK Source Extractor - Dex Fixed
+name: WeTransfer APK Source Extractor - Fully Fixed
 
 on:
   workflow_dispatch:
@@ -9,89 +9,251 @@ jobs:
     timeout-minutes: 60
 
     steps:
+
+      # ==========================================
+      # CHECKOUT
+      # ==========================================
+
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      # ==========================================
+      # JAVA
+      # ==========================================
 
       - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
-          distribution: 'temurin'
+          distribution: temurin
+          java-version: 21
 
-      - name: Install Tools
+      # ==========================================
+      # DEPENDENCIES
+      # ==========================================
+
+      - name: Install Dependencies
         run: |
           sudo apt update
-          sudo apt install -y wget unzip curl
-          
-          # APKTool 3.0.2
-          wget https://github.com/iBotPeaches/Apktool/releases/download/v3.0.2/apktool_3.0.2.jar -O apktool.jar || \
-          wget https://bitbucket.org/iBotPeaches/apktool/downloads/apktool_3.0.2.jar -O apktool.jar
-          
-          # Jadx
-          wget https://github.com/skylot/jadx/releases/download/v1.5.0/jadx-1.5.0.zip -O jadx.zip
+          sudo apt install -y \
+            wget \
+            curl \
+            unzip \
+            zip \
+            jq \
+            file
+
+      # ==========================================
+      # APKTOOL
+      # ==========================================
+
+      - name: Install APKTool
+        run: |
+          wget \
+            https://github.com/iBotPeaches/Apktool/releases/download/v2.9.3/apktool_2.9.3.jar \
+            -O apktool.jar
+
+      # ==========================================
+      # JADX
+      # ==========================================
+
+      - name: Install JADX
+        run: |
+          wget \
+            https://github.com/skylot/jadx/releases/download/v1.5.0/jadx-1.5.0.zip \
+            -O jadx.zip
+
           unzip jadx.zip -d jadx
+
           chmod +x jadx/bin/jadx
-          
-          # Dex2jar - Handle nested dex-tools-v2.4 folder
-          wget https://github.com/pxb1988/dex2jar/releases/download/v2.4/dex-tools-v2.4.zip -O dex2jar.zip
-          unzip dex2jar.zip -d dex2jar_temp
-          mv dex2jar_temp/dex-tools-v2.4 dex2jar
-          rm -rf dex2jar_temp
+
+      # ==========================================
+      # DEX2JAR
+      # ==========================================
+
+      - name: Install dex2jar
+        run: |
+          wget \
+            https://github.com/pxb1988/dex2jar/releases/download/v2.4/dex-tools-v2.4.zip \
+            -O dex2jar.zip
+
+          unzip dex2jar.zip
+
+          mv dex-tools-v2.4 dex2jar
+
           chmod +x dex2jar/*.sh
 
-      - name: Resolve and Download APK from WeTransfer
+      # ==========================================
+      # DOWNLOAD APK
+      # ==========================================
+
+      - name: Download APK from WeTransfer
         run: |
-          WT_URL="https://we.tl/t-TxiJS7spnHyOgMGC"
-          echo "Processing: $WT_URL"
-          
-          DIRECT_URL=$(curl -Ls -o /dev/null -w %{url_effective} "$WT_URL")
-          echo "Resolved: $DIRECT_URL"
-          
-          wget --timeout=300 --tries=5 \
-               --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
-               --header="Accept: application/octet-stream" \
-               --header="Referer: https://wetransfer.com/" \
-               -O app.apk "$DIRECT_URL" || \
-          curl -L --max-time 300 --retry 5 -A "Mozilla/5.0" -o app.apk "$WT_URL"
-          
+          WT_URL="https://wetransfer.com/download/local-bartender?id=eyJhcGlCYXNlIjoiL2FwaS92NCIsImRkUHJveHlCYXNlIjoiaHR0cHM6Ly9sb2NhbC1iYXJ0ZW5kZXItZGQtcHJveHkud2V0cmFuc2Zlci5uZXQvYXBpIiwidHJhbnNmZXJJZCI6ImFhOTYyYTY0ZmI5YzA3NGEzNjNjYzVmNDA3MTI0OGY4MjAyNjA1MzExNDI5MjQiLCJzZWNyZXQiOiJmOWE4M2YiLCJpbnRlbnQiOiJlbnRpcmVfdHJhbnNmZXIiLCJkb3dubG9hZElkIjoiZjZhMTgzMTAtMGI3OS00ODJlLTg1MTYtOTM2OGU5OTI4MmU1IiwibG9jYWxTdG9yYWdlSWQiOiIzNmZhNzY4Ni04Y2E4LTQ1MDktYmQ1Zi1mMzdjNmExYWM3OGUifQ%3D%3D"
+
+          echo "Starting download..."
+
+          curl -L \
+            --retry 5 \
+            --retry-delay 5 \
+            --max-time 600 \
+            --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
+            -o app.apk \
+            "$WT_URL"
+
+          echo ""
+          echo "===== APK INFO ====="
           ls -lh app.apk
           file app.apk
 
-      - name: Run APK Extraction
+      # ==========================================
+      # VERIFY APK
+      # ==========================================
+
+      - name: Verify APK Validity
         run: |
-          APK_FILE="app.apk"
-          echo "Starting full decompile"
-          
-          java -jar apktool.jar d "$APK_FILE" -o decompiled -f
-          
+          FILE_TYPE=$(file app.apk)
+
+          echo "$FILE_TYPE"
+
+          if [[ "$FILE_TYPE" != *"Zip archive"* ]] && \
+             [[ "$FILE_TYPE" != *"Java archive"* ]] && \
+             [[ "$FILE_TYPE" != *"Android package"* ]]; then
+
+            echo "ERROR: Downloaded file is not a valid APK"
+            exit 1
+          fi
+
+          echo "APK validation successful"
+
+      # ==========================================
+      # VERIFY APK CONTENTS
+      # ==========================================
+
+      - name: Verify APK Structure
+        run: |
+          unzip -l app.apk | head -50
+
+      # ==========================================
+      # APKTOOL DECOMPILE
+      # ==========================================
+
+      - name: Decode APK with APKTool
+        run: |
+          echo "Starting APKTool decode..."
+
+          java -jar apktool.jar d app.apk -o decompiled -f
+
+          echo "APKTool decode completed"
+
+      # ==========================================
+      # EXTRACT DEX FILES
+      # ==========================================
+
+      - name: Extract DEX Files
+        run: |
           mkdir -p dex
-          unzip -j "$APK_FILE" "classes*.dex" -d dex || true
-          
-          for dex in dex/classes*.dex; do
+
+          unzip -j app.apk "classes*.dex" -d dex || true
+
+          echo "===== DEX FILES ====="
+          ls -lh dex || true
+
+      # ==========================================
+      # DEX TO JAR
+      # ==========================================
+
+      - name: Convert DEX to JAR
+        run: |
+          mkdir -p jars
+
+          for dex in dex/*.dex; do
             if [ -f "$dex" ]; then
-              ./dex2jar/d2j-dex2jar.sh -f "\( dex" -o " \){dex%.dex}.jar"
+
+              NAME=$(basename "$dex" .dex)
+
+              echo "Converting: $dex"
+
+              ./dex2jar/d2j-dex2jar.sh \
+                -f "$dex" \
+                -o "jars/$NAME.jar"
+
             fi
           done
-          
-          ./jadx/bin/jadx --deobf --threads 4 -d java_source "$APK_FILE" || ./jadx/bin/jadx --deobf -d java_source dex/*.jar
-          
-          echo "Extraction done"
 
-      - name: Package Results
+          echo ""
+          echo "===== GENERATED JARS ====="
+          ls -lh jars || true
+
+      # ==========================================
+      # JADX JAVA SOURCE
+      # ==========================================
+
+      - name: Decompile Java Source with JADX
         run: |
-          zip -r source_code.zip decompiled java_source -9
-          ls -lh source_code.zip
+          echo "Running JADX..."
+
+          ./jadx/bin/jadx \
+            --threads-count 4 \
+            --deobf \
+            --show-bad-code \
+            -d java_source \
+            app.apk
+
+          echo "JADX completed"
+
+      # ==========================================
+      # VERIFY OUTPUTS
+      # ==========================================
+
+      - name: Verify Generated Source
+        run: |
+          echo "===== Decompiled ====="
+          ls -lh decompiled || true
+
+          echo ""
+          echo "===== Java Source ====="
+          ls -lh java_source || true
+
+      # ==========================================
+      # PACKAGE RESULTS
+      # ==========================================
+
+      - name: Package Extracted Source
+        run: |
+          zip -r extracted_source.zip \
+            decompiled \
+            java_source \
+            jars \
+            -9
+
+          echo ""
+          echo "===== FINAL ZIP ====="
+          ls -lh extracted_source.zip
+
+      # ==========================================
+      # UPLOAD ARTIFACT
+      # ==========================================
 
       - name: Upload Extracted Source
         uses: actions/upload-artifact@v4
         with:
-          name: we-transfer-apk-source-final
+          name: extracted-apk-source
           path: |
-            source_code.zip
+            extracted_source.zip
             decompiled/
             java_source/
+            jars/
           retention-days: 3
+
+      # ==========================================
+      # CLEANUP
+      # ==========================================
 
       - name: Cleanup
         if: always()
-        run: rm -f app.apk
+        run: |
+          rm -f app.apk
+          rm -f jadx.zip
+          rm -f dex2jar.zip
+
+          echo "Cleanup complete"
