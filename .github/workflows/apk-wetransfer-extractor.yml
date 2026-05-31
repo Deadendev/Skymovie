@@ -1,4 +1,4 @@
-name: WeTransfer APK Source Extractor - Fixed
+name: WeTransfer APK Source Extractor - Mirror Fixed
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
 jobs:
   extract-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 60
 
     steps:
       - name: Checkout Repository
@@ -22,11 +22,16 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y wget unzip curl
-          # Fixed APKTool 3.0.2
-          wget https://bitbucket.org/iBotPeaches/apktool/downloads/apktool_3.0.2.jar -O apktool.jar
+          
+          # Mirror APKTool 3.0.2 (reliable in 2026)
+          wget https://github.com/iBotPeaches/Apktool/releases/download/v3.0.2/apktool_3.0.2.jar -O apktool.jar || \
+          wget https://bitbucket.org/iBotPeaches/apktool/downloads/apktool_3.0.2.jar -O apktool.jar || \
+          wget https://connortumbleson.com/apktool/apktool_3.0.2.jar -O apktool.jar
+          
           wget https://github.com/skylot/jadx/releases/download/v1.5.0/jadx-1.5.0.zip -O jadx.zip
           unzip jadx.zip -d jadx
           chmod +x jadx/bin/jadx
+          
           wget https://github.com/pxb1988/dex2jar/releases/download/v2.4/dex-tools-2.4.zip -O dex2jar.zip
           unzip dex2jar.zip -d dex2jar
           chmod +x dex2jar/d2j-dex2jar.sh
@@ -34,7 +39,7 @@ jobs:
       - name: Resolve and Download APK from WeTransfer
         run: |
           WT_URL="https://we.tl/t-TxiJS7spnHyOgMGC"
-          echo "Processing WeTransfer link: $WT_URL"
+          echo "Processing: $WT_URL"
           
           DIRECT_URL=$(curl -Ls -o /dev/null -w %{url_effective} "$WT_URL")
           echo "Resolved: $DIRECT_URL"
@@ -44,8 +49,7 @@ jobs:
                --header="Accept: application/octet-stream" \
                --header="Referer: https://wetransfer.com/" \
                -O app.apk "$DIRECT_URL" || \
-          curl -L --max-time 300 --retry 5 \
-               -A "Mozilla/5.0" -o app.apk "$WT_URL"
+          curl -L --max-time 300 --retry 5 -A "Mozilla/5.0" -o app.apk "$WT_URL"
           
           ls -lh app.apk
           file app.apk
@@ -53,7 +57,7 @@ jobs:
       - name: Run APK Extraction
         run: |
           APK_FILE="app.apk"
-          echo "Starting full decompile"
+          echo "Starting decompile"
           
           java -jar apktool.jar d "$APK_FILE" -o decompiled -f
           
@@ -68,7 +72,7 @@ jobs:
           
           ./jadx/bin/jadx --deobf --threads 4 -d java_source "$APK_FILE" || ./jadx/bin/jadx --deobf -d java_source dex/*.jar
           
-          echo "Extraction finished"
+          echo "Extraction done"
 
       - name: Package Results
         run: |
@@ -78,7 +82,7 @@ jobs:
       - name: Upload Extracted Source
         uses: actions/upload-artifact@v4
         with:
-          name: we-transfer-apk-source-79mb-fixed
+          name: we-transfer-apk-source-fixed
           path: |
             source_code.zip
             decompiled/
