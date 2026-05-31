@@ -1,4 +1,4 @@
-name: WeTransfer APK Source Extractor
+name: WeTransfer APK Source Extractor - Fixed
 
 on:
   workflow_dispatch:
@@ -22,7 +22,8 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y wget unzip curl
-          wget https://bitbucket.org/iBotPeaches/apktool/downloads/apktool_2.10.0.jar -O apktool.jar
+          # Fixed APKTool 3.0.2
+          wget https://bitbucket.org/iBotPeaches/apktool/downloads/apktool_3.0.2.jar -O apktool.jar
           wget https://github.com/skylot/jadx/releases/download/v1.5.0/jadx-1.5.0.zip -O jadx.zip
           unzip jadx.zip -d jadx
           chmod +x jadx/bin/jadx
@@ -35,27 +36,23 @@ jobs:
           WT_URL="https://we.tl/t-TxiJS7spnHyOgMGC"
           echo "Processing WeTransfer link: $WT_URL"
           
-          # Get final redirect/direct download link
           DIRECT_URL=$(curl -Ls -o /dev/null -w %{url_effective} "$WT_URL")
-          echo "Resolved direct URL: $DIRECT_URL"
+          echo "Resolved: $DIRECT_URL"
           
-          # Aggressive download with browser mimic
           wget --timeout=300 --tries=5 \
                --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
                --header="Accept: application/octet-stream" \
                --header="Referer: https://wetransfer.com/" \
                -O app.apk "$DIRECT_URL" || \
           curl -L --max-time 300 --retry 5 \
-               -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
-               -o app.apk "$WT_URL"
+               -A "Mozilla/5.0" -o app.apk "$WT_URL"
           
           ls -lh app.apk
-          file app.apk || echo "File downloaded"
+          file app.apk
 
       - name: Run APK Extraction
         run: |
           APK_FILE="app.apk"
-          
           echo "Starting full decompile"
           
           java -jar apktool.jar d "$APK_FILE" -o decompiled -f
@@ -81,7 +78,7 @@ jobs:
       - name: Upload Extracted Source
         uses: actions/upload-artifact@v4
         with:
-          name: we-transfer-apk-source-79mb
+          name: we-transfer-apk-source-79mb-fixed
           path: |
             source_code.zip
             decompiled/
