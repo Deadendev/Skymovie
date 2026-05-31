@@ -1,4 +1,4 @@
-name: WeTransfer APK Source Extractor - Mirror Fixed
+name: WeTransfer APK Source Extractor - Full Fixed
 
 on:
   workflow_dispatch:
@@ -23,16 +23,18 @@ jobs:
           sudo apt update
           sudo apt install -y wget unzip curl
           
-          # Mirror APKTool 3.0.2 (reliable in 2026)
+          # APKTool 3.0.2 with mirrors
           wget https://github.com/iBotPeaches/Apktool/releases/download/v3.0.2/apktool_3.0.2.jar -O apktool.jar || \
-          wget https://bitbucket.org/iBotPeaches/apktool/downloads/apktool_3.0.2.jar -O apktool.jar || \
-          wget https://connortumbleson.com/apktool/apktool_3.0.2.jar -O apktool.jar
+          wget https://bitbucket.org/iBotPeaches/apktool/downloads/apktool_3.0.2.jar -O apktool.jar
           
+          # Jadx
           wget https://github.com/skylot/jadx/releases/download/v1.5.0/jadx-1.5.0.zip -O jadx.zip
           unzip jadx.zip -d jadx
           chmod +x jadx/bin/jadx
           
-          wget https://github.com/pxb1988/dex2jar/releases/download/v2.4/dex-tools-2.4.zip -O dex2jar.zip
+          # Dex2jar - FIXED filename
+          wget https://github.com/pxb1988/dex2jar/releases/download/v2.4/dex-tools-v2.4.zip -O dex2jar.zip || \
+          wget https://github.com/pxb1988/dex2jar/releases/download/2.4/dex-tools-v2.4.zip -O dex2jar.zip
           unzip dex2jar.zip -d dex2jar
           chmod +x dex2jar/d2j-dex2jar.sh
 
@@ -57,7 +59,7 @@ jobs:
       - name: Run APK Extraction
         run: |
           APK_FILE="app.apk"
-          echo "Starting decompile"
+          echo "Starting full decompile"
           
           java -jar apktool.jar d "$APK_FILE" -o decompiled -f
           
@@ -82,7 +84,7 @@ jobs:
       - name: Upload Extracted Source
         uses: actions/upload-artifact@v4
         with:
-          name: we-transfer-apk-source-fixed
+          name: we-transfer-apk-source-full-fixed
           path: |
             source_code.zip
             decompiled/
