@@ -1,4 +1,4 @@
-name: WeTransfer APK Source Extractor - Full Fixed
+name: WeTransfer APK Source Extractor - Dex Fixed
 
 on:
   workflow_dispatch:
@@ -23,7 +23,7 @@ jobs:
           sudo apt update
           sudo apt install -y wget unzip curl
           
-          # APKTool 3.0.2 with mirrors
+          # APKTool 3.0.2
           wget https://github.com/iBotPeaches/Apktool/releases/download/v3.0.2/apktool_3.0.2.jar -O apktool.jar || \
           wget https://bitbucket.org/iBotPeaches/apktool/downloads/apktool_3.0.2.jar -O apktool.jar
           
@@ -32,11 +32,12 @@ jobs:
           unzip jadx.zip -d jadx
           chmod +x jadx/bin/jadx
           
-          # Dex2jar - FIXED filename
-          wget https://github.com/pxb1988/dex2jar/releases/download/v2.4/dex-tools-v2.4.zip -O dex2jar.zip || \
-          wget https://github.com/pxb1988/dex2jar/releases/download/2.4/dex-tools-v2.4.zip -O dex2jar.zip
-          unzip dex2jar.zip -d dex2jar
-          chmod +x dex2jar/d2j-dex2jar.sh
+          # Dex2jar - Handle nested dex-tools-v2.4 folder
+          wget https://github.com/pxb1988/dex2jar/releases/download/v2.4/dex-tools-v2.4.zip -O dex2jar.zip
+          unzip dex2jar.zip -d dex2jar_temp
+          mv dex2jar_temp/dex-tools-v2.4 dex2jar
+          rm -rf dex2jar_temp
+          chmod +x dex2jar/*.sh
 
       - name: Resolve and Download APK from WeTransfer
         run: |
@@ -84,7 +85,7 @@ jobs:
       - name: Upload Extracted Source
         uses: actions/upload-artifact@v4
         with:
-          name: we-transfer-apk-source-full-fixed
+          name: we-transfer-apk-source-final
           path: |
             source_code.zip
             decompiled/
