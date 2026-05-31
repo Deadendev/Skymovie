@@ -1,0 +1,93 @@
+name: WeTransfer APK Source Extractor
+
+on:
+  workflow_dispatch:
+
+jobs:
+  extract-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Install Tools
+        run: |
+          sudo apt update
+          sudo apt install -y wget unzip curl
+          wget https://bitbucket.org/iBotPeaches/apktool/downloads/apktool_2.10.0.jar -O apktool.jar
+          wget https://github.com/skylot/jadx/releases/download/v1.5.0/jadx-1.5.0.zip -O jadx.zip
+          unzip jadx.zip -d jadx
+          chmod +x jadx/bin/jadx
+          wget https://github.com/pxb1988/dex2jar/releases/download/v2.4/dex-tools-2.4.zip -O dex2jar.zip
+          unzip dex2jar.zip -d dex2jar
+          chmod +x dex2jar/d2j-dex2jar.sh
+
+      - name: Resolve and Download APK from WeTransfer
+        run: |
+          WT_URL="https://we.tl/t-TxiJS7spnHyOgMGC"
+          echo "Processing WeTransfer link: $WT_URL"
+          
+          # Get final redirect/direct download link
+          DIRECT_URL=$(curl -Ls -o /dev/null -w %{url_effective} "$WT_URL")
+          echo "Resolved direct URL: $DIRECT_URL"
+          
+          # Aggressive download with browser mimic
+          wget --timeout=300 --tries=5 \
+               --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+               --header="Accept: application/octet-stream" \
+               --header="Referer: https://wetransfer.com/" \
+               -O app.apk "$DIRECT_URL" || \
+          curl -L --max-time 300 --retry 5 \
+               -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
+               -o app.apk "$WT_URL"
+          
+          ls -lh app.apk
+          file app.apk || echo "File downloaded"
+
+      - name: Run APK Extraction
+        run: |
+          APK_FILE="app.apk"
+          
+          echo "Starting full decompile"
+          
+          java -jar apktool.jar d "$APK_FILE" -o decompiled -f
+          
+          mkdir -p dex
+          unzip -j "$APK_FILE" "classes*.dex" -d dex || true
+          
+          for dex in dex/classes*.dex; do
+            if [ -f "$dex" ]; then
+              ./dex2jar/d2j-dex2jar.sh -f "\( dex" -o " \){dex%.dex}.jar"
+            fi
+          done
+          
+          ./jadx/bin/jadx --deobf --threads 4 -d java_source "$APK_FILE" || ./jadx/bin/jadx --deobf -d java_source dex/*.jar
+          
+          echo "Extraction finished"
+
+      - name: Package Results
+        run: |
+          zip -r source_code.zip decompiled java_source -9
+          ls -lh source_code.zip
+
+      - name: Upload Extracted Source
+        uses: actions/upload-artifact@v4
+        with:
+          name: we-transfer-apk-source-79mb
+          path: |
+            source_code.zip
+            decompiled/
+            java_source/
+          retention-days: 3
+
+      - name: Cleanup
+        if: always()
+        run: rm -f app.apk
